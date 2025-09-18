@@ -30,6 +30,9 @@ app.get('/api', (req, res) => {
 });
 // Import and use your routes here
 import authRoutes from './routes/auth.routes.js';
-app.use('/api/auth', authRoutes); // Ensure authRoutes is imported correctly
+import usersRoutes from './routes/users.routes.js'
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 
 export default app;
