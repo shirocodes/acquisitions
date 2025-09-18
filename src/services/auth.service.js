@@ -1,6 +1,6 @@
 // implementing hashing per password
 import bcrypt from 'bcrypt';
-import logger from "../config/logger";
+import logger from "../config/logger.js";
 import { db } from "../config/database.js";
 import { users } from "../models/user.model.js";
 import { eq } from 'drizzle-orm';
@@ -13,6 +13,15 @@ export const hashPassword = async (password) => {
     throw new Error('Password hashing failed');
   }
 } 
+
+export const comparePassword = async (password, hashedPassword) => {
+  try {
+    return await bcrypt.compare(password, hashedPassword);
+  } catch (e) {
+    logger.error(`Error comparing password: ${e.message}`);
+    throw new Error('Error comparing password');
+  }
+};
 
 export const createUser = async ({ name, email, password, role = 'user' }) => {
     try {

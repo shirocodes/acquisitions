@@ -1,7 +1,7 @@
 import arcjet, { shield, detectBot, slidingWindow } from '@arcjet/node';
 
 const aj = arcjet({
-  key: process.env.ARCJET_KEY,
+  key: process.env.ARCJET_API_KEY,
   rules: [
     shield({ mode: 'LIVE' }),
     detectBot({

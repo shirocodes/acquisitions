@@ -1,10 +1,10 @@
 import jwt from 'jsonwebtoken';
-import logger from '../config/logger';
+import logger from '../config/logger.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-JWT-secret-key-please-change-in-production';
 const JWT_EXPIRES_IN = '1d'; // Token expiration time
 
-export const jwttoken = {
+const jwttoken = {
     sign: (payload) => {
         try {
             return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -22,3 +22,5 @@ export const jwttoken = {
         }                   
     }           
 }
+
+export default jwttoken;
