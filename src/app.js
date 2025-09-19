@@ -26,7 +26,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api', (req, res) => {
-  res.status(200).json({ message: 'Acquisition api is running', timestamp: new Date().toISOString(), uptime: process.uptime() });
+  res.status(200).json({ message: 'Acquisitions API is running!', timestamp: new Date().toISOString(), uptime: process.uptime() });
 });
 // Import and use your routes here
 import authRoutes from './routes/auth.routes.js';
@@ -34,5 +34,9 @@ import usersRoutes from './routes/users.routes.js'
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+})
 
 export default app;
