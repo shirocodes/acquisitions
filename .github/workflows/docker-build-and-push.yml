@@ -60,7 +60,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ secrets.DOCKER_USERNAME }}/acquisitions
+            ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions_app
           flavor: |
             latest=auto
             prefix=
@@ -114,7 +114,7 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Registry** | Docker Hub |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Repository** | \`${{ secrets.DOCKER_USERNAME }}/acquisitions\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Repository** | \`${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Digest** | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Platforms** | \`${{ env.DOCKER_PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Build Date** | ${{ steps.timestamp.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
@@ -135,13 +135,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "# Using latest tag" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Using specific timestamp" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Using commit SHA" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:${{ github.ref_name }}-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions:${{ github.ref_name }}-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Deployment" >> $GITHUB_STEP_SUMMARY
@@ -153,7 +153,7 @@ jobs:
           echo "  --name acquisitions-api \\" >> $GITHUB_STEP_SUMMARY
           echo "  --env-file .env.production \\" >> $GITHUB_STEP_SUMMARY
           echo "  -p 3000:3000 \\" >> $GITHUB_STEP_SUMMARY
-          echo "  ${{ secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "  ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
