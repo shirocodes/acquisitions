@@ -1,0 +1,172 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: 'Optional tag suffix (e.g., hotfix, custom)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  DOCKER_PLATFORMS: linux/amd64,linux/arm64
+  REGISTRY: docker.io
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver-opts: |
+            network=host
+            image=moby/buildkit:latest
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Generate timestamp
+        id: timestamp
+        run: |
+          TIMESTAMP=$(date -u +'%Y%m%d-%H%M%S')
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "Generated timestamp: $TIMESTAMP"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_USERNAME }}/acquisitions
+          flavor: |
+            latest=auto
+            prefix=
+            suffix=
+          tags: |
+            # Latest tag for main branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Branch name
+            type=ref,event=branch
+            # Git short SHA
+            type=sha,prefix={{branch}}-,format=short
+            # Timestamp tag
+            type=raw,value=prod-${{ steps.timestamp.outputs.timestamp }},enable={{is_default_branch}}
+            # Custom suffix if provided
+            type=raw,value={{branch}}-${{ inputs.tag_suffix }},enable=${{ inputs.tag_suffix != '' }}
+          labels: |
+            org.opencontainers.image.title=Acquisitions API
+            org.opencontainers.image.description=Production Docker image for Acquisitions API
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.timestamp.outputs.timestamp }}
+            maintainer=${{ github.repository_owner }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.DOCKER_PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+            BUILD_DATE=${{ steps.timestamp.outputs.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          provenance: false
+          sbom: false
+
+      - name: Generate image summary
+        run: |
+          echo "## 🐳 Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Image Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | Docker Hub |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Repository** | \`${{ secrets.DOCKER_USERNAME }}/acquisitions\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Digest** | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Platforms** | \`${{ env.DOCKER_PLATFORMS }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Date** | ${{ steps.timestamp.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Tags" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following tags were pushed to Docker Hub:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+            echo "- \`$tag\`" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull Commands" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "You can pull this image using any of these commands:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Using latest tag" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Using specific timestamp" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Using commit SHA" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/acquisitions:${{ github.ref_name }}-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To deploy this image in production:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --name acquisitions-api \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --env-file .env.production \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -p 3000:3000 \\" >> $GITHUB_STEP_SUMMARY
+          echo "  ${{ secrets.DOCKER_USERNAME }}/acquisitions:prod-${{ steps.timestamp.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Build and push completed successfully!**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Image scan summary
+        if: success()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔒 Security Note" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Consider adding image vulnerability scanning in production workflows." >> $GITHUB_STEP_SUMMARY
+          echo "Popular options include:" >> $GITHUB_STEP_SUMMARY
+          echo "- Trivy" >> $GITHUB_STEP_SUMMARY
+          echo "- Snyk" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker Scout" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,96 @@
+name: Lint and Format
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  lint-and-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        id: lint
+        run: |
+          npm run lint 2>&1 | tee lint-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::ESLint found issues. Run 'npm run lint:fix' locally to automatically fix some of them."
+            echo "## ❌ ESLint Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ESLint has detected code quality issues in your code." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### How to fix:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Run \`npm run lint:fix\` locally to automatically fix issues" >> $GITHUB_STEP_SUMMARY
+            echo "2. Review and manually fix any remaining issues" >> $GITHUB_STEP_SUMMARY
+            echo "3. Commit and push your changes" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>View ESLint output</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat lint-output.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            exit $exit_code
+          else
+            echo "## ✅ ESLint Check Passed" >> $GITHUB_STEP_SUMMARY
+            echo "No linting issues found!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Run Prettier Check
+        id: format
+        run: |
+          npm run format:check 2>&1 | tee format-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Prettier found formatting issues. Run 'npm run format' locally to fix them."
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ❌ Prettier Format Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Prettier has detected formatting issues in your code." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### How to fix:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Run \`npm run format\` locally to automatically format your code" >> $GITHUB_STEP_SUMMARY
+            echo "2. Commit and push the formatted code" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>View files that need formatting</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat format-output.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            exit $exit_code
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ Prettier Format Check Passed" >> $GITHUB_STEP_SUMMARY
+            echo "All files are properly formatted!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎉 All checks passed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "Your code meets all quality standards." >> $GITHUB_STEP_SUMMARY

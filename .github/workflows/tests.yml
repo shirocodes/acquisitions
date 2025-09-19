@@ -1,0 +1,196 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    env:
+      NODE_ENV: test
+      NODE_OPTIONS: --experimental-vm-modules
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        id: test
+        run: |
+          # Run tests and capture output
+          npm test -- --coverage --coverageReporters=json --coverageReporters=lcov --coverageReporters=text --coverageReporters=json-summary 2>&1 | tee test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          
+          # Create test summary
+          if [ $exit_code -eq 0 ]; then
+            echo "## ✅ Tests Passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract test results if available
+            if grep -q "Tests:" test-output.txt; then
+              echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              grep -E "(Tests:|Test Suites:|Time:|Ran all test suites)" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Extract coverage summary if available
+            if [ -f coverage/coverage-summary.json ]; then
+              echo "### Coverage Report" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Coverage | Details |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+              
+              # Parse coverage summary
+              lines_pct=$(cat coverage/coverage-summary.json | grep -oP '"lines":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              lines_covered=$(cat coverage/coverage-summary.json | grep -oP '"lines":\s*{\s*"total":\s*\d+,\s*"covered":\s*\K\d+' | head -1 || echo "0")
+              lines_total=$(cat coverage/coverage-summary.json | grep -oP '"lines":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              
+              statements_pct=$(cat coverage/coverage-summary.json | grep -oP '"statements":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              statements_covered=$(cat coverage/coverage-summary.json | grep -oP '"statements":\s*{\s*"total":\s*\d+,\s*"covered":\s*\K\d+' | head -1 || echo "0")
+              statements_total=$(cat coverage/coverage-summary.json | grep -oP '"statements":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              
+              functions_pct=$(cat coverage/coverage-summary.json | grep -oP '"functions":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              functions_covered=$(cat coverage/coverage-summary.json | grep -oP '"functions":\s*{\s*"total":\s*\d+,\s*"covered":\s*\K\d+' | head -1 || echo "0")
+              functions_total=$(cat coverage/coverage-summary.json | grep -oP '"functions":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              
+              branches_pct=$(cat coverage/coverage-summary.json | grep -oP '"branches":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              branches_covered=$(cat coverage/coverage-summary.json | grep -oP '"branches":\s*{\s*"total":\s*\d+,\s*"covered":\s*\K\d+' | head -1 || echo "0")
+              branches_total=$(cat coverage/coverage-summary.json | grep -oP '"branches":\s*{\s*"total":\s*\K\d+' | head -1 || echo "0")
+              
+              # Calculate percentages and create badges
+              if [ "$lines_total" -gt 0 ]; then
+                lines_pct=$(echo "scale=1; $lines_covered * 100 / $lines_total" | bc)
+              else
+                lines_pct="0"
+              fi
+              
+              if [ "$statements_total" -gt 0 ]; then
+                statements_pct=$(echo "scale=1; $statements_covered * 100 / $statements_total" | bc)
+              else
+                statements_pct="0"
+              fi
+              
+              if [ "$functions_total" -gt 0 ]; then
+                functions_pct=$(echo "scale=1; $functions_covered * 100 / $functions_total" | bc)
+              else
+                functions_pct="0"
+              fi
+              
+              if [ "$branches_total" -gt 0 ]; then
+                branches_pct=$(echo "scale=1; $branches_covered * 100 / $branches_total" | bc)
+              else
+                branches_pct="0"
+              fi
+              
+              echo "| Lines | ${lines_pct}% | ${lines_covered}/${lines_total} |" >> $GITHUB_STEP_SUMMARY
+              echo "| Statements | ${statements_pct}% | ${statements_covered}/${statements_total} |" >> $GITHUB_STEP_SUMMARY
+              echo "| Functions | ${functions_pct}% | ${functions_covered}/${functions_total} |" >> $GITHUB_STEP_SUMMARY
+              echo "| Branches | ${branches_pct}% | ${branches_covered}/${branches_total} |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Check for coverage text report
+              if grep -q "Coverage summary" test-output.txt; then
+                echo "<details>" >> $GITHUB_STEP_SUMMARY
+                echo "<summary>Detailed Coverage Report</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                sed -n '/Coverage summary/,/^$/p' test-output.txt >> $GITHUB_STEP_SUMMARY || true
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              # Fallback to text coverage if available
+              if grep -q "Coverage" test-output.txt; then
+                echo "### Coverage Report" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                grep -A 10 "Coverage" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "### 🎉 All tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Tests Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some tests have failed. Please review the output below and fix the failing tests." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Add test failure details
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>Test Output</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat test-output.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            
+            # Add annotations for failures
+            while IFS= read -r line; do
+              if echo "$line" | grep -q "FAIL"; then
+                file=$(echo "$line" | grep -oP '(?<=FAIL\s).*?(?=\s|$)' || true)
+                if [ -n "$file" ]; then
+                  echo "::error file=$file::Test failed in $file"
+                fi
+              fi
+            done < test-output.txt
+            
+            exit $exit_code
+          fi
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage/
+            test-output.txt
+          retention-days: 30
+
+      - name: Upload coverage to artifacts
+        if: success() && hashFiles('coverage/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-coverage
+          path: coverage/lcov.info
+          retention-days: 30
